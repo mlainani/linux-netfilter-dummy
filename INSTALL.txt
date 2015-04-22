@@ -1,0 +1,104 @@
+1. Build environment set-up (Ubuntu 14.04) 
+==========================================
+
+- Install required packages
+
+$ sudo apt-get install build-essential
+$ sudo apt-get install linux-headers-`uname -r`
+
+- Check for proper kernel headers installation
+$ ll -d /lib/modules/`uname -r`/build
+lrwxrwxrwx 1 root root 40 Sep 23  2014 /lib/modules/3.13.0-37-generic/build -> /usr/src/linux-headers-3.13.0-37-generic
+
+2. Module Compilation
+=====================
+
+$ make
+make ARCH=x86 CROSS_COMPILE= -C /lib/modules/3.13.0-37-generic/build M=/home/mlainani/programming/nf modules
+make[1]: Entering directory `/usr/src/linux-headers-3.13.0-37-generic'
+  CC [M]  /home/mlainani/programming/nf/nf_dummy.o
+  Building modules, stage 2.
+  MODPOST 1 modules
+  CC      /home/mlainani/programming/nf/nf_dummy.mod.o
+  LD [M]  /home/mlainani/programming/nf/nf_dummy.ko
+make[1]: Leaving directory `/usr/src/linux-headers-3.13.0-37-generic'
+
+3. Module loading
+=================
+
+$ modinfo ./nf_dummy.ko 
+filename:       /home/mlainani/programming/nf/./nf_dummy.ko
+version:        1.0.0
+license:        GPL
+description:    Example IPv6 Netfilter hook
+srcversion:     ADD2C9FF6EB4271983A5FEF
+depends:        
+vermagic:       3.13.0-37-generic SMP mod_unload modversions 
+parm:           debug_level: enable debug traces (0 to 4, 4 is most verbose) (int)
+parm:           iniface: input interface name - default 'lo' (charp)
+parm:           ttl: IPv6 hop limit value for which to drop packets (uint)
+
+$ sudo insmod nf_dummy.ko debug_level=4 ttl=128
+
+$ ls /sys/module/nf_dummy/parameters/
+debug_level  iniface  ttl
+$ cat /sys/module/nf_dummy/parameters/*
+4
+lo
+128
+
+4. Module Testing
+=================
+
+- Increase the console kernel log level
+
+$ sudo sysctl kernel.printk
+kernel.printk = 4	4	1	7
+
+$ sudo sysctl kernel.printk=8
+kernel.printk = 8
+
+$ sudo sysctl kernel.printk
+kernel.printk = 8	4	1	7
+
+- Generate traffic with allowed Hop Limit value
+
+$ ping6 -c 1 ::1
+PING ::1(::1) 56 data bytes
+64 bytes from ::1: icmp_seq=1 ttl=64 time=0.044 ms
+
+--- ::1 ping statistics ---
+1 packets transmitted, 1 received, 0% packet loss, time 0ms
+rtt min/avg/max/mdev = 0.044/0.044/0.044/0.000 ms
+
+$ dmesg | tail -10
+[    8.106405] intel_rapl: no valid rapl domains found in package 0
+[    9.436548] init: plymouth-upstart-bridge main process ended, respawning
+[   10.548018] ip_tables: (C) 2000-2006 Netfilter Core Team
+[   10.632117] ip6_tables: (C) 2000-2006 Netfilter Core Team
+[   10.722518] vmhgfs: module verification failed: signature and/or  required key missing - tainting kernel
+[   15.665465] mdmwebkit[1581]: segfault at 7f6bdc16c308 ip 00007f6c5cf76140 sp 00007fffdeb440a8 error 4 in libpixman-1.so.0.30.2[7f6c5cee6000+a1000]
+[   15.864293] init: plymouth-stop pre-start process (2073) terminated with status 1
+[   35.163459] sda1: WRITE SAME failed. Manually zeroing.
+[  690.761741] dummy_filter: pkt received on lo with hop limit 64
+[  690.761751] dummy_filter: pkt received on lo with hop limit 64
+
+- Generate traffic with filtered Hop Limit value
+
+$ ping6 -c 1 -t 128 ::1
+PING ::1(::1) 56 data bytes
+
+--- ::1 ping statistics ---
+1 packets transmitted, 0 received, 100% packet loss, time 0ms
+
+$ dmesg | tail -10
+[    9.436548] init: plymouth-upstart-bridge main process ended, respawning
+[   10.548018] ip_tables: (C) 2000-2006 Netfilter Core Team
+[   10.632117] ip6_tables: (C) 2000-2006 Netfilter Core Team
+[   10.722518] vmhgfs: module verification failed: signature and/or  required key missing - tainting kernel
+[   15.665465] mdmwebkit[1581]: segfault at 7f6bdc16c308 ip 00007f6c5cf76140 sp 00007fffdeb440a8 error 4 in libpixman-1.so.0.30.2[7f6c5cee6000+a1000]
+[   15.864293] init: plymouth-stop pre-start process (2073) terminated with status 1
+[   35.163459] sda1: WRITE SAME failed. Manually zeroing.
+[  690.761741] dummy_filter: pkt received on lo with hop limit 64
+[  690.761751] dummy_filter: pkt received on lo with hop limit 64
+[  727.124374] dummy_filter: pkt received on lo with hop limit 128 - drop
