@@ -33,26 +33,24 @@ MODULE_PARM_DESC(ttl, " IPv6 hop limit value for which to drop packets");
 #define debugf3( ... ) dummy_debug_printk(3, __VA_ARGS__ )
 #define debugf4( ... ) dummy_debug_printk(4, __VA_ARGS__ )
 
-static unsigned int dummy_filter(const struct nf_hook_ops *ops,
+static unsigned int dummy_filter(void *priv,
 				 struct sk_buff *skb,
-				 const struct net_device *in,
-				 const struct net_device *out,
-				 int (*okfn)(struct sk_buff *))
+				 const struct nf_hook_state *state)
 {
 	struct ipv6hdr *ipv6h;
 
 	/* Packet ingress device match ? */
-	if (in == indev) {
+	if (state->in == indev) {
 		ipv6h = ipv6_hdr(skb);
 		/* Packet hop limit value match ? */
 		if (ipv6h->hop_limit == ttl) {
 			debugf0("pkt received on %s with hop limit %d - drop\n",
-				in->name, ipv6h->hop_limit);
+				state->in->name, ipv6h->hop_limit);
 			return NF_DROP;
 		}
 
 		debugf4("pkt received on %s with hop limit %d\n",
-			in->name, ipv6h->hop_limit);
+			state->in->name, ipv6h->hop_limit);
 
 	}
 
@@ -61,7 +59,6 @@ static unsigned int dummy_filter(const struct nf_hook_ops *ops,
 
 static struct nf_hook_ops dummy_ops __read_mostly = {
 	.hook		= dummy_filter,
-	.owner		= THIS_MODULE,
 	.pf		= NFPROTO_IPV6,
 	.hooknum	= NF_INET_PRE_ROUTING,
 	.priority	= NF_IP6_PRI_FIRST + 1,
@@ -80,18 +77,18 @@ static int __init nf_dummy_init(void)
 		return -1;
 	}
 
-	ret = nf_register_hook(&dummy_ops);
+	ret = nf_register_net_hook(&init_net, &dummy_ops);
 	if (ret < 0) {
 		printk(KERN_ERR "%s can't register NF hook\n", __func__);
 		return -1;
 	}
-	
+
 	return 0;
 }
 
 static void __exit nf_dummy_fini(void)
 {
-	nf_unregister_hook(&dummy_ops);
+	nf_unregister_net_hook(&init_net, &dummy_ops);
 }
 
 module_init(nf_dummy_init);
